@@ -82,7 +82,7 @@ interface HarnessOptions {
   readonly capabilities?: ReadonlySet<McpInvocationContext.McpCapability>;
   readonly currentBranch?: string | null;
   readonly newWorktreesStartFromOrigin?: boolean;
-  readonly setupScript?: "started" | "no-script" | "fails";
+  readonly setupScript?: "started" | "no-script" | "fails" | "dies";
   readonly dispatchFails?: boolean;
   readonly createWorktreeGate?: Effect.Effect<void>;
 }
@@ -127,6 +127,8 @@ const makeHarness = (options: HarnessOptions = {}) => {
     switch (options.setupScript ?? "started") {
       case "no-script":
         return Effect.succeed({ status: "no-script" } as const);
+      case "dies":
+        return Effect.die(new Error("setup runner defect"));
       case "fails":
         return Effect.fail(
           new ProjectSetupScriptRunner.ProjectSetupScriptProjectNotFoundError({
@@ -369,6 +371,15 @@ describe("worktree_handoff", () => {
     return Effect.gen(function* () {
       const result = yield* runHandoff(harness, { branch: "feature/setup-fails" });
       expect(result.setupScript.status).toBe("failed");
+      expect(harness.dispatch).toHaveBeenCalled();
+    });
+  });
+
+  it.effect("reports a setup script defect without failing the handoff", () => {
+    const harness = makeHarness({ setupScript: "dies" });
+    return Effect.gen(function* () {
+      const result = yield* runHandoff(harness, { branch: "feature/setup-dies" });
+      expect(result.setupScript).toEqual({ status: "failed", detail: "setup runner defect" });
       expect(harness.dispatch).toHaveBeenCalled();
     });
   });

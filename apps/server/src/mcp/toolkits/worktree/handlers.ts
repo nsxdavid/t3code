@@ -11,6 +11,7 @@ import {
   type WorktreeStatusResult,
   WorktreeThreadNotFoundError,
 } from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -215,13 +216,17 @@ const performWorktreeHandoff = Effect.fn("WorktreeToolkit.performWorktreeHandoff
                 }
               : { status: "no-script" },
         ),
-        Effect.catch(
-          (error: unknown): Effect.Effect<WorktreeHandoffSetupScriptStatus> =>
+        // catchCause rather than catch: the thread is already re-pointed at the
+        // worktree, so even a defect in the setup runner must not fail the handoff.
+        Effect.catchCause(
+          (cause): Effect.Effect<WorktreeHandoffSetupScriptStatus> =>
             Effect.logWarning("worktree handoff setup script failed", {
               threadId: invocation.threadId,
               worktreePath,
-              detail: errorDetail(error),
-            }).pipe(Effect.as({ status: "failed", detail: errorDetail(error) } as const)),
+              detail: errorDetail(Cause.squash(cause)),
+            }).pipe(
+              Effect.as({ status: "failed", detail: errorDetail(Cause.squash(cause)) } as const),
+            ),
         ),
       );
   }
